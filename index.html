@@ -46,20 +46,19 @@
                 
                 <!-- Add Custom Item Form -->
                 <form onsubmit="addCustomGrocery(event)" class="flex gap-2 mb-6">
-                    <input type="text" id="grocery-name-input" placeholder="Add item..." required class="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <select id="grocery-store-input" class="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                        <option value="Harris Teeter">Harris Teeter</option>
-                        <option value="Whole Foods">Whole Foods</option>
-                        <option value="Trader Joe's">Trader Joe's</option>
-                        <option value="Sam's Club">Sam's Club</option>
-                        <option value="Other">Other</option>
-                    </select>
+                    <input type="text" id="grocery-name-input" placeholder="Add grocery item..." required class="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     <button type="submit" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition">Add</button>
                 </form>
 
-                <!-- Grouped Store List -->
-                <div id="grocery-display" class="space-y-6">
-                    <!-- Injected via JavaScript -->
+                <!-- Unified Grocery List -->
+                <div class="border rounded-lg p-3 bg-slate-50">
+                    <div class="flex justify-between items-center mb-2 px-1">
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Items</span>
+                        <span id="grocery-counter" class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">0 left</span>
+                    </div>
+                    <ul id="grocery-display" class="space-y-1.5">
+                        <!-- Injected via JavaScript -->
+                    </ul>
                 </div>
             </section>
         </div>
@@ -67,26 +66,26 @@
 
     <script>
         // Configuration
-        const SHARED_PASSWORD = 'ourhousepassword'; // Change to whatever shared password you prefer
+        const SHARED_PASSWORD = 'ourhousepassword';
         const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
         
         const LUNCH_OPTIONS = ['Leftovers', 'Turkey Wrap', 'PB&J', 'Mac & Cheese', 'Salad', 'Soup'];
         
         // Dinners with mapped automatic grocery ingredients
         const DINNER_RECIPES = {
-            'Chicken & Veggies': [{ name: 'Chicken Breast', store: 'Harris Teeter' }, { name: 'Broccoli', store: 'Whole Foods' }, { name: 'Olive Oil', store: 'Trader Joe\'s' }],
-            'Tacos': [{ name: 'Ground Beef', store: 'Harris Teeter' }, { name: 'Tortillas', store: 'Trader Joe\'s' }, { name: 'Cheddar Cheese', store: 'Sam\'s Club' }, { name: 'Salsa', store: 'Trader Joe\'s' }],
-            'Pasta Bolognese': [{ name: 'Ground Beef', store: 'Harris Teeter' }, { name: 'Pasta', store: 'Trader Joe\'s' }, { name: 'Marinara Sauce', store: 'Whole Foods' }],
-            'Salmon & Rice': [{ name: 'Salmon Fillets', store: 'Whole Foods' }, { name: 'Jasmine Rice', store: 'Sam\'s Club' }, { name: 'Asparagus', store: 'Harris Teeter' }],
-            'Stir Fry': [{ name: 'Chicken Breast', store: 'Harris Teeter' }, { name: 'Mixed Veggies', store: 'Trader Joe\'s' }, { name: 'Soy Sauce', store: 'Other' }],
-            'Pizza Night': [{ name: 'Pizza Dough', store: 'Trader Joe\'s' }, { name: 'Mozzarella', store: 'Harris Teeter' }, { name: 'Pepperoni', store: 'Sam\'s Club' }]
+            'Chicken & Veggies': [{ name: 'Chicken Breast' }, { name: 'Broccoli' }, { name: 'Olive Oil' }],
+            'Tacos': [{ name: 'Ground Beef' }, { name: 'Tortillas' }, { name: 'Cheddar Cheese' }, { name: 'Salsa' }],
+            'Pasta Bolognese': [{ name: 'Ground Beef' }, { name: 'Pasta' }, { name: 'Marinara Sauce' }],
+            'Salmon & Rice': [{ name: 'Salmon Fillets' }, { name: 'Jasmine Rice' }, { name: 'Asparagus' }],
+            'Stir Fry': [{ name: 'Chicken Breast' }, { name: 'Mixed Veggies' }, { name: 'Soy Sauce' }],
+            'Pizza Night': [{ name: 'Pizza Dough' }, { name: 'Mozzarella' }, { name: 'Pepperoni' }]
         };
 
         // Initialize state from LocalStorage or defaults
         let meals = JSON.parse(localStorage.getItem('hh_meals')) || {};
         let groceries = JSON.parse(localStorage.getItem('hh_groceries')) || [
-            { id: 1, name: 'Milk', store: 'Harris Teeter', purchased: false, source: 'manual' },
-            { id: 2, name: 'Eggs', store: 'Sam\'s Club', purchased: false, source: 'manual' }
+            { id: 1, name: 'Milk', purchased: false, source: 'manual' },
+            { id: 2, name: 'Eggs', purchased: false, source: 'manual' }
         ];
 
         function handleLogin() {
@@ -162,18 +161,15 @@
             meals[day].lunch = lunchVal;
             meals[day].dinner = dinnerVal;
 
-            // If dinner changed, handle auto-grocery population/removal
+            // If dinner changed, update automatic grocery items
             if (oldDinner !== dinnerVal) {
-                // Remove previous auto-added items for this day/dinner if they aren't manually added elsewhere
                 groceries = groceries.filter(item => item.source !== `${day}-dinner`);
 
-                // Add new ingredients if recipe exists
                 if (dinnerVal && DINNER_RECIPES[dinnerVal]) {
                     DINNER_RECIPES[dinnerVal].forEach(ing => {
                         groceries.push({
                             id: Date.now() + Math.random(),
                             name: ing.name,
-                            store: ing.store,
                             purchased: false,
                             source: `${day}-dinner`
                         });
@@ -190,12 +186,10 @@
         function addCustomGrocery(e) {
             e.preventDefault();
             const nameInput = document.getElementById('grocery-name-input');
-            const storeInput = document.getElementById('grocery-store-input');
 
             groceries.push({
                 id: Date.now(),
                 name: nameInput.value.trim(),
-                store: storeInput.value,
                 purchased: false,
                 source: 'manual'
             });
@@ -222,38 +216,24 @@
 
         function renderGroceries() {
             const container = document.getElementById('grocery-display');
+            const counter = document.getElementById('grocery-counter');
 
-            // Group by store
-            const grouped = groceries.reduce((acc, item) => {
-                const store = item.store || 'Other';
-                if (!acc[store]) acc[store] = [];
-                acc[store].push(item);
-                return acc;
-            }, {});
+            const remainingCount = groceries.filter(i => !i.purchased).length;
+            counter.innerText = `${remainingCount} left`;
 
             if (groceries.length === 0) {
                 container.innerHTML = `<p class="text-sm text-slate-400 italic text-center py-4">Your grocery list is empty.</p>`;
                 return;
             }
 
-            container.innerHTML = Object.entries(grouped).map(([store, items]) => `
-                <div class="border rounded-lg p-3 bg-slate-50">
-                    <h3 class="font-bold text-slate-700 text-sm mb-2 flex justify-between items-center">
-                        <span>📍 ${store}</span>
-                        <span class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">${items.filter(i => !i.purchased).length} left</span>
-                    </h3>
-                    <ul class="space-y-1.5">
-                        ${items.map(item => `
-                            <li class="flex items-center justify-between text-sm bg-white p-2 rounded border border-slate-100 shadow-xs">
-                                <label class="flex items-center gap-2 cursor-pointer ${item.purchased ? 'line-through text-slate-400' : 'text-slate-700'}">
-                                    <input type="checkbox" ${item.purchased ? 'checked' : ''} onchange="togglePurchased(${item.id})" class="rounded text-blue-600 focus:ring-0">
-                                    <span>${item.name}</span>
-                                </label>
-                                <button onclick="deleteGrocery(${item.id})" class="text-slate-400 hover:text-red-500 text-xs px-1 font-bold">✕</button>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
+            container.innerHTML = groceries.map(item => `
+                <li class="flex items-center justify-between text-sm bg-white p-2 rounded border border-slate-100 shadow-xs">
+                    <label class="flex items-center gap-2 cursor-pointer ${item.purchased ? 'line-through text-slate-400' : 'text-slate-700'}">
+                        <input type="checkbox" ${item.purchased ? 'checked' : ''} onchange="togglePurchased(${item.id})" class="rounded text-blue-600 focus:ring-0">
+                        <span>${item.name}</span>
+                    </label>
+                    <button onclick="deleteGrocery(${item.id})" class="text-slate-400 hover:text-red-500 text-xs px-1 font-bold">✕</button>
+                </li>
             `).join('');
         }
     </script>
