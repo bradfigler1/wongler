@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <title>Weekday Meal Planner & Grocery List</title>
+  
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
@@ -24,6 +29,15 @@
       padding: 28px;
       border: 1px solid #e2e2e2;
       border-radius: 4px;
+    }
+    .sync-status {
+      display: inline-block;
+      font-size: 0.8rem;
+      color: #2e7d32;
+      background: #e8f5e9;
+      padding: 3px 8px;
+      border-radius: 3px;
+      margin-bottom: 16px;
     }
     .grid-week {
       display: grid;
@@ -58,13 +72,14 @@
       color: #555;
       margin-bottom: 3px;
     }
-    select {
+    select, input[type="text"], input[type="password"] {
       width: 100%;
       padding: 6px 8px;
       font-size: 0.88rem;
       border: 1px solid #ccc;
       border-radius: 3px;
       background-color: #fff;
+      box-sizing: border-box;
     }
     .filter-bar {
       display: flex;
@@ -85,6 +100,38 @@
       width: auto;
       min-width: 200px;
     }
+    
+    /* Add Custom Item Box */
+    .add-custom-box {
+      border: 1px solid #e2e2e2;
+      background: #fcfcfc;
+      padding: 14px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .add-custom-box h3 {
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+    }
+    .custom-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .custom-stores-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 0.82rem;
+      color: #444;
+    }
+    .custom-stores-row label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
     .grocery-list {
       list-style: none;
       padding: 0;
@@ -121,7 +168,19 @@
       border: 1px solid #ddd;
       margin-left: 4px;
     }
-    button {
+    .delete-btn {
+      color: #888;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 0 6px;
+      margin-left: 6px;
+    }
+    .delete-btn:hover {
+      color: #c62828;
+    }
+    button.action-btn {
       padding: 6px 12px;
       font-size: 0.85rem;
       border: 1px solid #ccc;
@@ -129,7 +188,7 @@
       border-radius: 3px;
       cursor: pointer;
     }
-    button:hover {
+    button.action-btn:hover {
       background: #f0f0f0;
     }
     .empty-state {
@@ -138,21 +197,72 @@
       color: #777;
       font-style: italic;
     }
+    
+    /* Password Modal Overlay */
+    #lockOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(250, 250, 250, 0.96);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    .lock-card {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 24px 28px;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+      max-width: 320px;
+      width: 100%;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
 
-<div class="container">
+<!-- PASSWORD PROTECTION OVERLAY -->
+<div id="lockOverlay">
+  <div class="lock-card">
+    <h3 style="margin-bottom: 8px;">Household Passcode</h3>
+    <p style="font-size: 0.85rem; color:#666; margin-top:0;">Enter passcode to access meal planner:</p>
+    <input type="password" id="passInput" placeholder="Password" style="margin-bottom: 12px; text-align: center;" />
+    <div>
+      <button class="action-btn" id="unlockBtn" style="width: 100%;">Unlock</button>
+    </div>
+    <p id="lockError" style="color: #c62828; font-size: 0.8rem; margin: 8px 0 0; display: none;">Incorrect passcode</p>
+  </div>
+</div>
+
+<div class="container" id="appContainer" style="display: none;">
   <h1>Weekday Meal Planner</h1>
-  <p style="margin-top:-8px; margin-bottom: 20px; color:#666; font-size: 0.9rem;">
-    Select lunches and dinners for Monday through Friday. Your grocery items will aggregate automatically below.
-  </p>
+  <div id="syncStatus" class="sync-status">Cloud Sync: Connecting...</div>
 
   <!-- Week Schedule Grid (Mon - Fri) -->
   <div class="grid-week" id="weekContainer"></div>
 
   <!-- Grocery List & Store Filter -->
   <h2>Shopping List</h2>
+  
+  <!-- Add Extra Items (Free Text + Stores) -->
+  <div class="add-custom-box">
+    <h3>+ Add Extra Item to Grocery List</h3>
+    <div class="custom-input-row">
+      <input type="text" id="customItemInput" placeholder="Item name (e.g. Chocolate milk, bananas, paper towels)" />
+      <button class="action-btn" id="addCustomBtn" type="button">Add Item</button>
+    </div>
+    <div class="custom-stores-row">
+      <span style="font-weight: 600; color: #555;">Available at:</span>
+      <label><input type="checkbox" name="customStore" value="Harris Teeter"> Harris Teeter</label>
+      <label><input type="checkbox" name="customStore" value="Trader Joe's"> Trader Joe's</label>
+      <label><input type="checkbox" name="customStore" value="Costco"> Costco</label>
+      <label><input type="checkbox" name="customStore" value="Sam's Club"> Sam's Club</label>
+      <label><input type="checkbox" name="customStore" value="Wegmans"> Wegmans</label>
+      <label><input type="checkbox" name="customStore" value="Amazon"> Amazon</label>
+    </div>
+  </div>
+
   <div class="filter-bar">
     <label for="storeFilter">Filter by Store:</label>
     <select id="storeFilter">
@@ -164,8 +274,8 @@
       <option value="Wegmans">Wegmans</option>
       <option value="Amazon">Amazon</option>
     </select>
-    <button id="clearChecksBtn" type="button">Uncheck All Items</button>
-    <button id="resetWeekBtn" type="button">Reset Week</button>
+    <button class="action-btn" id="clearChecksBtn" type="button">Uncheck All Items</button>
+    <button class="action-btn" id="resetWeekBtn" type="button">Reset Week</button>
   </div>
 
   <ul class="grocery-list" id="groceryListContainer"></ul>
@@ -240,7 +350,65 @@ Cottage cheese,TRUE,TRUE,TRUE,TRUE,TRUE,
 </script>
 
 <script>
-// --- STRICT DOUBLE-QUOTE ONLY CSV PARSER ---
+// ==========================================
+// 1. SIMPLE HOUSEHOLD PASSWORD PROTECTION
+// ==========================================
+// Change this string to whatever family password you prefer:
+const APP_PASSWORD = "swim2026";
+
+function checkAuth() {
+  const isAuth = localStorage.getItem('wongler_auth_verified');
+  if (isAuth === 'true') {
+    document.getElementById('lockOverlay').style.display = 'none';
+    document.getElementById('appContainer').style.display = 'block';
+  } else {
+    document.getElementById('lockOverlay').style.display = 'flex';
+    document.getElementById('appContainer').style.display = 'none';
+  }
+}
+
+document.getElementById('unlockBtn').addEventListener('click', handleUnlock);
+document.getElementById('passInput').addEventListener('keyup', (e) => {
+  if (e.key === 'Enter') handleUnlock();
+});
+
+function handleUnlock() {
+  const val = document.getElementById('passInput').value;
+  if (val === APP_PASSWORD) {
+    localStorage.setItem('wongler_auth_verified', 'true');
+    document.getElementById('lockOverlay').style.display = 'none';
+    document.getElementById('appContainer').style.display = 'block';
+  } else {
+    document.getElementById('lockError').style.display = 'block';
+  }
+}
+
+// ==========================================
+// 2. FIREBASE CONFIGURATION
+// ==========================================
+// Paste your exact keys from the Firebase console here:
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "wongler-meal-planning.firebaseapp.com",
+  projectId: "wongler-meal-planning",
+  storageBucket: "wongler-meal-planning.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let db = null;
+let planDocRef = null;
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  planDocRef = db.collection('mealPlanner').doc('currentWeek');
+} catch (e) {
+  console.warn("Firebase not configured yet.", e);
+}
+
+// ==========================================
+// 3. CSV PARSING & STATE
+// ==========================================
 function parseCSV(text) {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length === 0) return [];
@@ -264,7 +432,6 @@ function parseCSVLine(line) {
   let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    // ONLY double quotes act as CSV string delimiters, never single apostrophes
     if (char === '"') {
       if (inQuotes && line[i + 1] === '"') {
         current += '"';
@@ -283,14 +450,13 @@ function parseCSVLine(line) {
   return result;
 }
 
-// --- STATE MANAGEMENT ---
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 let mealsData = [];
-let ingredientsMap = {}; // normalizedKey -> { displayName, stores: [] }
-let selections = JSON.parse(localStorage.getItem('wongler_meal_selections')) || {};
-let checkedItems = JSON.parse(localStorage.getItem('wongler_checked_items')) || {};
+let ingredientsMap = {};
+let selections = {};
+let checkedItems = {};
+let customItems = []; // Array of { id, name, stores: [] }
 
-// Initialize Data & Build Lookup Dictionary
 function initData() {
   const mealsRaw = document.getElementById('mealsCsvData').textContent;
   mealsData = parseCSV(mealsRaw);
@@ -318,7 +484,6 @@ function initData() {
   });
 }
 
-// Render Dropdown Menus for Monday - Friday
 function renderDays() {
   const container = document.getElementById('weekContainer');
   container.innerHTML = '';
@@ -334,7 +499,6 @@ function renderDays() {
     card.className = 'day-card';
     card.innerHTML = `<h3>${day}</h3>`;
 
-    // Lunch Dropdown
     const lunchField = document.createElement('div');
     lunchField.className = 'meal-field';
     lunchField.innerHTML = `<label for="${day}_lunch">Lunch</label>`;
@@ -342,7 +506,6 @@ function renderDays() {
     lunchSelect.id = `${day}_lunch`;
     lunchSelect.innerHTML = `<option value="">-- None / Leftovers --</option>`;
 
-    // Dinner Dropdown
     const dinnerField = document.createElement('div');
     dinnerField.className = 'meal-field';
     dinnerField.innerHTML = `<label for="${day}_dinner">Dinner</label>`;
@@ -350,7 +513,6 @@ function renderDays() {
     dinnerSelect.id = `${day}_dinner`;
     dinnerSelect.innerHTML = `<option value="">-- None / Dine Out --</option>`;
 
-    // Group items into OptGroups
     Object.keys(categories).forEach(cat => {
       const optGroupL = document.createElement('optgroup');
       optGroupL.label = cat;
@@ -380,22 +542,117 @@ function renderDays() {
   });
 }
 
+// ==========================================
+// 4. CLOUD SYNC & REALTIME LISTENER
+// ==========================================
+function syncToCloud() {
+  if (!planDocRef) {
+    localStorage.setItem('wongler_meal_selections', JSON.stringify(selections));
+    localStorage.setItem('wongler_checked_items', JSON.stringify(checkedItems));
+    localStorage.setItem('wongler_custom_items', JSON.stringify(customItems));
+    return;
+  }
+  planDocRef.set({
+    selections: selections,
+    checkedItems: checkedItems,
+    customItems: customItems,
+    lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true });
+}
+
+function listenToCloud() {
+  const statusEl = document.getElementById('syncStatus');
+  if (!planDocRef) {
+    statusEl.textContent = 'Mode: Offline Local Storage (Add Firebase keys to enable sync)';
+    statusEl.style.color = '#555';
+    statusEl.style.background = '#eee';
+    selections = JSON.parse(localStorage.getItem('wongler_meal_selections')) || {};
+    checkedItems = JSON.parse(localStorage.getItem('wongler_checked_items')) || {};
+    customItems = JSON.parse(localStorage.getItem('wongler_custom_items')) || [];
+    renderDays();
+    updateGroceryList();
+    return;
+  }
+
+  planDocRef.onSnapshot(doc => {
+    statusEl.textContent = 'Cloud Sync: Active (Connected to Firestore)';
+    statusEl.style.color = '#2e7d32';
+    statusEl.style.background = '#e8f5e9';
+
+    if (doc.exists) {
+      const data = doc.data();
+      selections = data.selections || {};
+      checkedItems = data.checkedItems || {};
+      customItems = data.customItems || [];
+    } else {
+      selections = {};
+      checkedItems = {};
+      customItems = [];
+    }
+    renderDays();
+    updateGroceryList();
+  }, err => {
+    console.error("Firestore error:", err);
+    statusEl.textContent = 'Cloud Sync: Connection Error (Check rules/keys)';
+    statusEl.style.color = '#c62828';
+    statusEl.style.background = '#ffebee';
+  });
+}
+
 function onMealChange(key, value) {
   selections[key] = value;
-  localStorage.setItem('wongler_meal_selections', JSON.stringify(selections));
+  syncToCloud();
   updateGroceryList();
 }
 
-// Generate De-duplicated Grocery List & Apply Filters
+// ==========================================
+// 5. CUSTOM EXTRA ITEM HANDLER
+// ==========================================
+document.getElementById('addCustomBtn').addEventListener('click', addCustomItem);
+document.getElementById('customItemInput').addEventListener('keyup', e => {
+  if (e.key === 'Enter') addCustomItem();
+});
+
+function addCustomItem() {
+  const input = document.getElementById('customItemInput');
+  const itemName = input.value.trim();
+  if (!itemName) return;
+
+  // Selected store checkboxes
+  const storeCheckboxes = document.querySelectorAll('input[name="customStore"]:checked');
+  const chosenStores = Array.from(storeCheckboxes).map(cb => cb.value);
+
+  customItems.push({
+    id: 'cust_' + Date.now(),
+    name: itemName,
+    stores: chosenStores
+  });
+
+  input.value = '';
+  storeCheckboxes.forEach(cb => cb.checked = false);
+
+  syncToCloud();
+  updateGroceryList();
+}
+
+function deleteCustomItem(id) {
+  customItems = customItems.filter(item => item.id !== id);
+  delete checkedItems[id];
+  syncToCloud();
+  updateGroceryList();
+}
+
+// ==========================================
+// 6. GROCERY LIST GENERATOR
+// ==========================================
 function updateGroceryList() {
   const container = document.getElementById('groceryListContainer');
   const activeStore = document.getElementById('storeFilter').value;
   container.innerHTML = '';
 
   const neededIngredientKeys = new Set();
-  const rawKeyMap = {}; // normalizedKey -> original text fallback
+  const rawKeyMap = {};
 
-  // Extract from selected meals
   DAYS.forEach(day => {
     ['lunch', 'dinner'].forEach(mealType => {
       const mealId = selections[`${day}_${mealType}`];
@@ -414,26 +671,25 @@ function updateGroceryList() {
     });
   });
 
-  if (neededIngredientKeys.size === 0) {
-    container.innerHTML = '<li class="empty-state">No meals selected yet. Choose lunch or dinner options above to generate your list.</li>';
+  if (neededIngredientKeys.size === 0 && customItems.length === 0) {
+    container.innerHTML = '<li class="empty-state">No items yet. Choose meals above or add extra grocery items.</li>';
     return;
   }
 
-  // Sort alphabetically by clean display name
+  let displayedCount = 0;
+
+  // Render Meal Ingredients
   const sortedKeys = Array.from(neededIngredientKeys).sort((a, b) => {
     const nameA = (ingredientsMap[a] ? ingredientsMap[a].displayName : rawKeyMap[a]).toLowerCase();
     const nameB = (ingredientsMap[b] ? ingredientsMap[b].displayName : rawKeyMap[b]).toLowerCase();
     return nameA.localeCompare(nameB);
   });
 
-  let displayedCount = 0;
-
   sortedKeys.forEach(key => {
     const itemData = ingredientsMap[key] || { displayName: rawKeyMap[key], stores: [] };
     const stores = itemData.stores;
     const displayName = itemData.displayName;
 
-    // Filter by selected store
     if (activeStore !== 'ALL' && !stores.includes(activeStore)) {
       return;
     }
@@ -449,30 +705,80 @@ function updateGroceryList() {
     checkbox.checked = isChecked;
     checkbox.addEventListener('change', () => {
       checkedItems[key] = checkbox.checked;
-      localStorage.setItem('wongler_checked_items', JSON.stringify(checkedItems));
+      syncToCloud();
       li.classList.toggle('checked', checkbox.checked);
     });
 
     label.appendChild(checkbox);
     label.appendChild(document.createTextNode(displayName));
 
-    const badgeContainer = document.createElement('div');
+    const rightContainer = document.createElement('div');
     if (activeStore === 'ALL' && stores.length > 0) {
       stores.forEach(s => {
         const badge = document.createElement('span');
         badge.className = 'store-badge';
         badge.textContent = s;
-        badgeContainer.appendChild(badge);
+        rightContainer.appendChild(badge);
       });
     }
 
     li.appendChild(label);
-    li.appendChild(badgeContainer);
+    li.appendChild(rightContainer);
+    container.appendChild(li);
+  });
+
+  // Render Custom Added Items
+  customItems.forEach(item => {
+    // If a store is filtered, show only if tagged for this store, OR if no stores were specified (wildcard)
+    if (activeStore !== 'ALL' && item.stores.length > 0 && !item.stores.includes(activeStore)) {
+      return;
+    }
+
+    displayedCount++;
+    const isChecked = !!checkedItems[item.id];
+    const li = document.createElement('li');
+    li.className = `grocery-item ${isChecked ? 'checked' : ''}`;
+
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = isChecked;
+    checkbox.addEventListener('change', () => {
+      checkedItems[item.id] = checkbox.checked;
+      syncToCloud();
+      li.classList.toggle('checked', checkbox.checked);
+    });
+
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(item.name));
+
+    const rightContainer = document.createElement('div');
+    rightContainer.style.display = 'flex';
+    rightContainer.style.alignItems = 'center';
+
+    if (activeStore === 'ALL' && item.stores.length > 0) {
+      item.stores.forEach(s => {
+        const badge = document.createElement('span');
+        badge.className = 'store-badge';
+        badge.textContent = s;
+        rightContainer.appendChild(badge);
+      });
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'delete-btn';
+    delBtn.title = 'Remove item';
+    delBtn.innerHTML = '&times;';
+    delBtn.addEventListener('click', () => deleteCustomItem(item.id));
+    rightContainer.appendChild(delBtn);
+
+    li.appendChild(label);
+    li.appendChild(rightContainer);
     container.appendChild(li);
   });
 
   if (displayedCount === 0) {
-    container.innerHTML = `<li class="empty-state">No ingredients from your selected meals are tagged for <strong>${activeStore}</strong>.</li>`;
+    container.innerHTML = `<li class="empty-state">No ingredients or extra items are tagged for <strong>${activeStore}</strong>.</li>`;
   }
 }
 
@@ -481,25 +787,24 @@ document.getElementById('storeFilter').addEventListener('change', updateGroceryL
 
 document.getElementById('clearChecksBtn').addEventListener('click', () => {
   checkedItems = {};
-  localStorage.setItem('wongler_checked_items', JSON.stringify(checkedItems));
+  syncToCloud();
   updateGroceryList();
 });
 
 document.getElementById('resetWeekBtn').addEventListener('click', () => {
-  if (confirm('Reset all meal selections for Monday–Friday?')) {
+  if (confirm('Reset meal selections for Monday–Friday? (Custom grocery items will be kept)')) {
     selections = {};
     checkedItems = {};
-    localStorage.removeItem('wongler_meal_selections');
-    localStorage.removeItem('wongler_checked_items');
+    syncToCloud();
     renderDays();
     updateGroceryList();
   }
 });
 
 // App Startup
+checkAuth();
 initData();
-renderDays();
-updateGroceryList();
+listenToCloud();
 </script>
 
 </body>
