@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Weekday Meal Planner & Grocery List</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.5;
+      color: #222;
+      background-color: #fafafa;
+      margin: 0;
+      padding: 24px;
+    }
+    h1, h2, h3 {
+      font-weight: 600;
+      color: #111;
+      margin-top: 0;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 28px;
+      border: 1px solid #e2e2e2;
+      border-radius: 4px;
+    }
+    .grid-week {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+    .day-card {
+      border: 1px solid #dedede;
+      border-radius: 4px;
+      padding: 12px 14px;
+      background: #fdfdfd;
+    }
+    .day-card h3 {
+      margin-bottom: 8px;
+      font-size: 1rem;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 4px;
+    }
+    .meal-field {
+      margin-bottom: 10px;
+    }
+    .meal-field:last-child {
+      margin-bottom: 0;
+    }
+    .meal-field label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #555;
+      margin-bottom: 3px;
+    }
+    select {
+      width: 100%;
+      padding: 6px 8px;
+      font-size: 0.88rem;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      background-color: #fff;
+    }
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      background: #f4f4f4;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      margin-bottom: 18px;
+    }
+    .filter-bar label {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .filter-bar select {
+      width: auto;
+      min-width: 200px;
+    }
+    .grocery-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .grocery-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .grocery-item:hover {
+      background-color: #fcfcfc;
+    }
+    .grocery-item label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      flex-grow: 1;
+    }
+    .grocery-item.checked label {
+      text-decoration: line-through;
+      color: #888;
+    }
+    .store-badge {
+      font-size: 0.75rem;
+      color: #666;
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid #ddd;
+      margin-left: 4px;
+    }
+    button {
+      padding: 6px 12px;
+      font-size: 0.85rem;
+      border: 1px solid #ccc;
+      background: #fff;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #f0f0f0;
+    }
+    .empty-state {
+      padding: 24px;
+      text-align: center;
+      color: #777;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Weekday Meal Planner</h1>
+  <p style="margin-top:-8px; margin-bottom: 20px; color:#666; font-size: 0.9rem;">
+    Select lunches and dinners for Monday through Friday. Your grocery items will aggregate automatically below.
+  </p>
+
+  <!-- Week Schedule Grid (Mon - Fri) -->
+  <div class="grid-week" id="weekContainer"></div>
+
+  <!-- Grocery List & Store Filter -->
+  <h2>Shopping List</h2>
+  <div class="filter-bar">
+    <label for="storeFilter">Filter by Store:</label>
+    <select id="storeFilter">
+      <option value="ALL">All Stores (Full List)</option>
+      <option value="Harris Teeter">Harris Teeter</option>
+      <option value="Trader Joe's">Trader Joe's</option>
+      <option value="Sam's Club">Sam's Club</option>
+      <option value="Costco">Costco</option>
+      <option value="Wegmans">Wegmans</option>
+      <option value="Amazon">Amazon</option>
+    </select>
+    <button id="clearChecksBtn" type="button">Uncheck All Items</button>
+    <button id="resetWeekBtn" type="button">Reset Week</button>
+  </div>
+
+  <ul class="grocery-list" id="groceryListContainer"></ul>
+</div>
+
+<!-- EMBEDDED CSV DATA -->
+<script id="mealsCsvData" type="text/csv">
+meal_id,meal_name,category,ingredients
+L1,Annie's Protein Mac & Cheese,Lunch Entree,"Annie's Protein Mac and Cheese,Fairlife milk,Unsalted butter"
+L2,Pizza Cupcakes,Lunch Entree,"Pizza cupcakes"
+L3,TJ's Spinach Tortellini,Lunch Entree,"Trader Joe's spinach tortellini,Marinara sauce,Unsalted butter"
+L4,Feed Zone Savory Rice Bowl,Lunch Entree,"Jasmine rice,Trader Joe's Chicken Meatballs,Eggs,Soy sauce / Tamari,Sesame oil"
+L5,Mini Meatball & Ditalini Broth Bowl,Lunch Entree,"Trader Joe's Chicken Meatballs,Barilla protein pasta,Chicken broth"
+D1,Chicken Adobo & Rice,Dinner Home-Cooked,"Chicken thighs or breasts,Jasmine rice,Soy sauce / Tamari"
+D2,Spaghetti & Meatballs,Dinner Home-Cooked,"Barilla protein pasta,Trader Joe's Chicken Meatballs,Marinara sauce"
+D3,Sheet-Pan Teriyaki Chicken,Dinner Home-Cooked,"Chicken thighs or breasts,Broccoli florets,Soy sauce / Tamari,Brown sugar / Honey,Sesame oil,Jasmine rice"
+D4,Ground Bulgogi Bowls,Dinner Home-Cooked,"Ground beef or turkey,Soy sauce / Tamari,Brown sugar / Honey,Sesame oil,Garlic,Ginger,Jasmine rice,Cucumbers"
+D5,Instant Pot Chicken Burrito Bowls,Dinner Home-Cooked,"Chicken thighs or breasts,White rice,Chicken broth,Black beans,Frozen sweet corn,Mild salsa,Taco seasoning"
+D6,Feed Zone Recovery Pancakes with Fruit,Dinner Home-Cooked,"Pancake mix,Fairlife milk,Eggs,Pure maple syrup,Bananas,Berries"
+D7,Annie's Mac & Cheese,Dinner Quick Boxed/Frozen,"Annie's Protein Mac and Cheese,Fairlife milk,Unsalted butter"
+D8,Penne Pasta with Marinara,Dinner Quick Boxed/Frozen,"Barilla protein pasta,Marinara sauce"
+D9,Trader Joe's Frozen Dumplings,Dinner Quick Boxed/Frozen,"Trader Joe's frozen chicken dumplings,Soy sauce / Tamari"
+D10,Ramen,Dinner Quick Boxed/Frozen,"Ramen noodles,Chicken broth,Eggs"
+D11,Paris Banh Mi,Dinner Takeout,""
+D12,Mr. Dumpling,Dinner Takeout,""
+D13,Chipotle,Dinner Takeout,""
+D14,Kahlovera,Dinner Takeout,""
+D15,Harris Teeter Sushi,Dinner Takeout,""
+</script>
+
+<script id="ingredientsCsvData" type="text/csv">
+ingredient,Harris Teeter,Trader Joe's,Sam's Club,Costco,Wegmans,Amazon
+Annie's Protein Mac and Cheese,TRUE,,,TRUE,,TRUE
+Pizza cupcakes,,,,TRUE,,
+Trader Joe's spinach tortellini,,TRUE,,,,
+Trader Joe's Chicken Meatballs,,TRUE,,,,
+Trader Joe's frozen chicken dumplings,,TRUE,,,,
+Barilla protein pasta,TRUE,,,TRUE,TRUE,TRUE
+Chicken broth,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+Jasmine rice,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+White rice,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+Chicken thighs or breasts,TRUE,TRUE,TRUE,TRUE,TRUE,
+Ground beef or turkey,TRUE,TRUE,TRUE,TRUE,TRUE,
+Black beans,TRUE,TRUE,TRUE,TRUE,TRUE,
+Frozen sweet corn,TRUE,TRUE,,TRUE,TRUE,
+Mild salsa,TRUE,TRUE,,,TRUE,
+Taco seasoning,TRUE,TRUE,,,TRUE,TRUE
+Broccoli florets,TRUE,TRUE,,,TRUE,
+Cucumbers,TRUE,TRUE,,,TRUE,
+Garlic,TRUE,TRUE,,,TRUE,
+Ginger,TRUE,TRUE,,,TRUE,
+Soy sauce / Tamari,TRUE,TRUE,,,TRUE,TRUE
+Sesame oil,TRUE,TRUE,,,TRUE,TRUE
+Brown sugar / Honey,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+Marinara sauce,TRUE,TRUE,,,TRUE,TRUE
+Eggs,TRUE,TRUE,TRUE,TRUE,TRUE,
+Fairlife milk,TRUE,,,TRUE,TRUE,
+Unsalted butter,TRUE,TRUE,TRUE,TRUE,TRUE,
+Pancake mix,TRUE,,TRUE,TRUE,TRUE,TRUE
+Pure maple syrup,TRUE,TRUE,TRUE,TRUE,TRUE,
+Bananas,TRUE,TRUE,,,TRUE,
+Berries,TRUE,TRUE,TRUE,TRUE,TRUE,
+Ramen noodles,TRUE,TRUE,,,TRUE,TRUE
+Apples,TRUE,TRUE,TRUE,TRUE,TRUE,
+Graham crackers,TRUE,,,TRUE,TRUE,TRUE
+Pretzels,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+Popcorn,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+Applesauce,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+Potatoes (Yukon Gold),TRUE,TRUE,TRUE,TRUE,TRUE,
+Baby carrots,TRUE,TRUE,TRUE,TRUE,TRUE,
+Cottage cheese,TRUE,TRUE,TRUE,TRUE,TRUE,
+</script>
+
+<script>
+// --- STRICT DOUBLE-QUOTE ONLY CSV PARSER ---
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length === 0) return [];
+  const headers = parseCSVLine(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const values = parseCSVLine(lines[i]);
+    const obj = {};
+    headers.forEach((h, idx) => {
+      obj[h.trim()] = values[idx] ? values[idx].trim() : '';
+    });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    // ONLY double quotes act as CSV string delimiters, never single apostrophes
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+// --- STATE MANAGEMENT ---
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+let mealsData = [];
+let ingredientsMap = {}; // normalizedKey -> { displayName, stores: [] }
+let selections = JSON.parse(localStorage.getItem('wongler_meal_selections')) || {};
+let checkedItems = JSON.parse(localStorage.getItem('wongler_checked_items')) || {};
+
+// Initialize Data & Build Lookup Dictionary
+function initData() {
+  const mealsRaw = document.getElementById('mealsCsvData').textContent;
+  mealsData = parseCSV(mealsRaw);
+
+  const ingRaw = document.getElementById('ingredientsCsvData').textContent;
+  const ingRows = parseCSV(ingRaw);
+  const storeCols = ["Harris Teeter", "Trader Joe's", "Sam's Club", "Costco", "Wegmans", "Amazon"];
+
+  ingRows.forEach(row => {
+    const rawName = row['ingredient'];
+    if (!rawName) return;
+    const normalizedKey = rawName.trim().toLowerCase();
+    
+    ingredientsMap[normalizedKey] = {
+      displayName: rawName.trim(),
+      stores: []
+    };
+
+    storeCols.forEach(store => {
+      const val = (row[store] || '').toUpperCase();
+      if (val === 'TRUE' || val === 'YES' || val === 'X' || val === '1') {
+        ingredientsMap[normalizedKey].stores.push(store);
+      }
+    });
+  });
+}
+
+// Render Dropdown Menus for Monday - Friday
+function renderDays() {
+  const container = document.getElementById('weekContainer');
+  container.innerHTML = '';
+
+  const categories = {};
+  mealsData.forEach(meal => {
+    if (!categories[meal.category]) categories[meal.category] = [];
+    categories[meal.category].push(meal);
+  });
+
+  DAYS.forEach(day => {
+    const card = document.createElement('div');
+    card.className = 'day-card';
+    card.innerHTML = `<h3>${day}</h3>`;
+
+    // Lunch Dropdown
+    const lunchField = document.createElement('div');
+    lunchField.className = 'meal-field';
+    lunchField.innerHTML = `<label for="${day}_lunch">Lunch</label>`;
+    const lunchSelect = document.createElement('select');
+    lunchSelect.id = `${day}_lunch`;
+    lunchSelect.innerHTML = `<option value="">-- None / Leftovers --</option>`;
+
+    // Dinner Dropdown
+    const dinnerField = document.createElement('div');
+    dinnerField.className = 'meal-field';
+    dinnerField.innerHTML = `<label for="${day}_dinner">Dinner</label>`;
+    const dinnerSelect = document.createElement('select');
+    dinnerSelect.id = `${day}_dinner`;
+    dinnerSelect.innerHTML = `<option value="">-- None / Dine Out --</option>`;
+
+    // Group items into OptGroups
+    Object.keys(categories).forEach(cat => {
+      const optGroupL = document.createElement('optgroup');
+      optGroupL.label = cat;
+      const optGroupD = document.createElement('optgroup');
+      optGroupD.label = cat;
+
+      categories[cat].forEach(m => {
+        optGroupL.appendChild(new Option(m.meal_name, m.meal_id));
+        optGroupD.appendChild(new Option(m.meal_name, m.meal_id));
+      });
+
+      lunchSelect.appendChild(optGroupL);
+      dinnerSelect.appendChild(optGroupD);
+    });
+
+    if (selections[`${day}_lunch`]) lunchSelect.value = selections[`${day}_lunch`];
+    if (selections[`${day}_dinner`]) dinnerSelect.value = selections[`${day}_dinner`];
+
+    lunchSelect.addEventListener('change', e => onMealChange(`${day}_lunch`, e.target.value));
+    dinnerSelect.addEventListener('change', e => onMealChange(`${day}_dinner`, e.target.value));
+
+    lunchField.appendChild(lunchSelect);
+    dinnerField.appendChild(dinnerSelect);
+    card.appendChild(lunchField);
+    card.appendChild(dinnerField);
+    container.appendChild(card);
+  });
+}
+
+function onMealChange(key, value) {
+  selections[key] = value;
+  localStorage.setItem('wongler_meal_selections', JSON.stringify(selections));
+  updateGroceryList();
+}
+
+// Generate De-duplicated Grocery List & Apply Filters
+function updateGroceryList() {
+  const container = document.getElementById('groceryListContainer');
+  const activeStore = document.getElementById('storeFilter').value;
+  container.innerHTML = '';
+
+  const neededIngredientKeys = new Set();
+  const rawKeyMap = {}; // normalizedKey -> original text fallback
+
+  // Extract from selected meals
+  DAYS.forEach(day => {
+    ['lunch', 'dinner'].forEach(mealType => {
+      const mealId = selections[`${day}_${mealType}`];
+      if (!mealId) return;
+      const meal = mealsData.find(m => m.meal_id === mealId);
+      if (meal && meal.ingredients) {
+        meal.ingredients.split(',').forEach(item => {
+          const trimmed = item.trim();
+          if (trimmed) {
+            const key = trimmed.toLowerCase();
+            neededIngredientKeys.add(key);
+            if (!rawKeyMap[key]) rawKeyMap[key] = trimmed;
+          }
+        });
+      }
+    });
+  });
+
+  if (neededIngredientKeys.size === 0) {
+    container.innerHTML = '<li class="empty-state">No meals selected yet. Choose lunch or dinner options above to generate your list.</li>';
+    return;
+  }
+
+  // Sort alphabetically by clean display name
+  const sortedKeys = Array.from(neededIngredientKeys).sort((a, b) => {
+    const nameA = (ingredientsMap[a] ? ingredientsMap[a].displayName : rawKeyMap[a]).toLowerCase();
+    const nameB = (ingredientsMap[b] ? ingredientsMap[b].displayName : rawKeyMap[b]).toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
+  let displayedCount = 0;
+
+  sortedKeys.forEach(key => {
+    const itemData = ingredientsMap[key] || { displayName: rawKeyMap[key], stores: [] };
+    const stores = itemData.stores;
+    const displayName = itemData.displayName;
+
+    // Filter by selected store
+    if (activeStore !== 'ALL' && !stores.includes(activeStore)) {
+      return;
+    }
+
+    displayedCount++;
+    const isChecked = !!checkedItems[key];
+    const li = document.createElement('li');
+    li.className = `grocery-item ${isChecked ? 'checked' : ''}`;
+
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = isChecked;
+    checkbox.addEventListener('change', () => {
+      checkedItems[key] = checkbox.checked;
+      localStorage.setItem('wongler_checked_items', JSON.stringify(checkedItems));
+      li.classList.toggle('checked', checkbox.checked);
+    });
+
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(displayName));
+
+    const badgeContainer = document.createElement('div');
+    if (activeStore === 'ALL' && stores.length > 0) {
+      stores.forEach(s => {
+        const badge = document.createElement('span');
+        badge.className = 'store-badge';
+        badge.textContent = s;
+        badgeContainer.appendChild(badge);
+      });
+    }
+
+    li.appendChild(label);
+    li.appendChild(badgeContainer);
+    container.appendChild(li);
+  });
+
+  if (displayedCount === 0) {
+    container.innerHTML = `<li class="empty-state">No ingredients from your selected meals are tagged for <strong>${activeStore}</strong>.</li>`;
+  }
+}
+
+// Reset Handlers
+document.getElementById('storeFilter').addEventListener('change', updateGroceryList);
+
+document.getElementById('clearChecksBtn').addEventListener('click', () => {
+  checkedItems = {};
+  localStorage.setItem('wongler_checked_items', JSON.stringify(checkedItems));
+  updateGroceryList();
+});
+
+document.getElementById('resetWeekBtn').addEventListener('click', () => {
+  if (confirm('Reset all meal selections for Monday–Friday?')) {
+    selections = {};
+    checkedItems = {};
+    localStorage.removeItem('wongler_meal_selections');
+    localStorage.removeItem('wongler_checked_items');
+    renderDays();
+    updateGroceryList();
+  }
+});
+
+// App Startup
+initData();
+renderDays();
+updateGroceryList();
+</script>
+
+</body>
+</html>
